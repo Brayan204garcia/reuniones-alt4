@@ -76,8 +76,14 @@ async function supabaseFetch(path: string, init: RequestInit = {}) {
     throw new Error(text || "Supabase no respondio correctamente.");
   }
 
-  if (response.status === 204) return null;
-  return response.json();
+  const text = await response.text();
+  if (!text.trim()) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("Supabase guardo la informacion, pero respondio con un formato inesperado.");
+  }
 }
 
 export async function listMeetings() {

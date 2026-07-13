@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { meetingTitleExists, saveMeeting } from "../../lib/supabase-rest";
 
 const DEFAULT_GUEST_EMAIL = "bratorres204@gmail.com";
@@ -18,7 +19,10 @@ type CreateMeetPayload = {
 };
 
 function getAppsScriptUrl() {
-  const url = process.env.APPS_SCRIPT_URL;
+  const bindings = env as unknown as {
+    APPS_SCRIPT_URL?: string;
+  };
+  const url = bindings.APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL;
 
   if (!url) {
     throw new Error("Falta configurar la URL privada de reuniones.");
