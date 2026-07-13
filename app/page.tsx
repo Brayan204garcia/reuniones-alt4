@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+const TIME_ZONE = "America/Bogota";
+
 type AttendanceStatus = "presente" | "pendiente" | "justificado" | "ausente";
 
 type Member = {
@@ -17,11 +19,18 @@ type Meeting = {
   title: string;
   date: string;
   startTime: string;
-  duration: number;
-  location: string;
-  meetLink: string;
-  agenda: string;
+  meetUrl?: string;
+  calendarUrl?: string;
+  attendance?: Member[];
   createdAt: string;
+};
+
+type ModalState = {
+  type: "success" | "error";
+  title: string;
+  message: string;
+  meetUrl?: string;
+  calendarUrl?: string;
 };
 
 const initialMembers: Member[] = [
@@ -73,46 +82,27 @@ function pad(value: number) {
   return String(value).padStart(2, "0");
 }
 
-function toCalendarStamp(date: string, time: string, duration: number) {
-  const [year, month, day] = date.split("-").map(Number);
-  const [hour, minute] = time.split(":").map(Number);
-  const start = new Date(year, month - 1, day, hour, minute);
-  const end = new Date(start.getTime() + duration * 60 * 1000);
-
-  const local = (value: Date) =>
-    `${value.getFullYear()}${pad(value.getMonth() + 1)}${pad(value.getDate())}T${pad(value.getHours())}${pad(value.getMinutes())}00`;
-  const utc = (value: Date) =>
-    `${value.getUTCFullYear()}${pad(value.getUTCMonth() + 1)}${pad(value.getUTCDate())}T${pad(value.getUTCHours())}${pad(value.getUTCMinutes())}00Z`;
-
-  return { start, end, google: `${local(start)}/${local(end)}`, utcStart: utc(start), utcEnd: utc(end) };
-}
-
-function escapeIcs(value: string) {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/\n/g, "\\n")
-    .replace(/,/g, "\\,")
-    .replace(/;/g, "\\;");
+function todayStamp() {
+  const today = new Date();
+  return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 }
 
 export default function Home() {
-  const today = new Date();
-  const defaultDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const defaultDate = todayStamp();
   const [members, setMembers] = useState<Member[]>(initialMembers);
   const [meeting, setMeeting] = useState<Meeting>({
     id: "reunion-inicial",
     title: "Seguimiento ALT-F4 SIC-2026",
     date: defaultDate,
     startTime: "09:00",
-    duration: 60,
-    location: "Sala virtual ALT-F4",
-    meetLink: "",
-    agenda: "Revision de avances, acuerdos pendientes y responsables de la siguiente entrega.",
     createdAt: new Date().toISOString(),
   });
   const [savedMeetings, setSavedMeetings] = useState<Meeting[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState(meeting.id);
   const [storageReady, setStorageReady] = useState(false);
+  const [isLoadingMeetings, setIsLoadingMeetings] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [modal, setModal] = useState<ModalState | null>(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("alt-f4-sic-2026-state");
@@ -128,11 +118,43 @@ export default function Home() {
         if (parsed.meeting) setMeeting(parsed.meeting);
         if (parsed.savedMeetings) setSavedMeetings(parsed.savedMeetings);
         if (parsed.selectedMeetingId) setSelectedMeetingId(parsed.selectedMeetingId);
+        const selected = parsed.savedMeetings?.find((item) => item.id === parsed.selectedMeetingId);
+        if (selected?.attendance) setMembers(selected.attendance);
       } catch {
         window.localStorage.removeItem("alt-f4-sic-2026-state");
       }
     }
     setStorageReady(true);
+  }, []);
+
+  useEffect(() => {
+    async function loadMeetingsFromDatabase() {
+      try {
+        const response = await fetch("/api/meetings");
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          throw new Error(data?.error || "No se pudieron cargar las reuniones.");
+        }
+
+        if (data.meetings.length > 0) {
+          setSavedMeetings(data.meetings);
+          setSelectedMeetingId(data.meetings[0].id);
+          setMeeting(data.meetings[0]);
+          setMembers(data.meetings[0].attendance?.length ? data.meetings[0].attendance : initialMembers);
+        }
+      } catch (error) {
+        setModal({
+          type: "error",
+          title: "No se pudieron cargar las reuniones",
+          message: error instanceof Error ? error.message : "Intenta de nuevo.",
+        });
+      } finally {
+        setIsLoadingMeetings(false);
+      }
+    }
+
+    void loadMeetingsFromDatabase();
   }, []);
 
   useEffect(() => {
@@ -145,46 +167,40 @@ export default function Home() {
 
   const presentCount = members.filter((member) => member.status === "presente").length;
   const pendingCount = members.filter((member) => member.status === "pendiente").length;
-  const emails = members.map((member) => member.email.trim()).filter(Boolean);
-
-  const calendarDetails = useMemo(() => {
-    const attendance = members
-      .map((member) => `- ${member.name}: ${statusLabels[member.status]}`)
-      .join("\n");
-    const link = meeting.meetLink ? `\nEnlace: ${meeting.meetLink}` : "";
-    return `${meeting.agenda}${link}\n\nAsistencia ALT-F4 SIC-2026:\n${attendance}`;
-  }, [meeting.agenda, meeting.meetLink, members]);
-
-  const calendarUrl = useMemo(() => {
-    const stamps = toCalendarStamp(meeting.date, meeting.startTime, meeting.duration);
-    const params = new URLSearchParams({
-      action: "TEMPLATE",
-      text: meeting.title,
-      dates: stamps.google,
-      details: calendarDetails,
-      location: meeting.meetLink || meeting.location,
-      ctz: "America/Bogota",
-    });
-
-    if (emails.length > 0) {
-      params.set("add", emails.join(","));
-    }
-
-    return `https://calendar.google.com/calendar/render?${params.toString()}`;
-  }, [calendarDetails, emails, meeting]);
+  const meetCount = savedMeetings.filter((item) => item.meetUrl).length;
+  const latestMeetUrl = useMemo(
+    () => savedMeetings.find((item) => item.meetUrl)?.meetUrl,
+    [savedMeetings],
+  );
 
   function updateMember(id: string, patch: Partial<Member>) {
-    setMembers((current) =>
-      current.map((member) => (member.id === id ? { ...member, ...patch } : member)),
-    );
+    setMembers((current) => {
+      const next = current.map((member) => (member.id === id ? { ...member, ...patch } : member));
+      const updatedMember = next.find((member) => member.id === id);
+      setSavedMeetings((meetings) =>
+        meetings.map((item) =>
+          item.id === selectedMeetingId ? { ...item, attendance: next } : item,
+        ),
+      );
+      if (updatedMember && savedMeetings.some((item) => item.id === selectedMeetingId && item.meetUrl)) {
+        void fetch("/api/attendance", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            meetingId: selectedMeetingId,
+            member: updatedMember,
+          }),
+        });
+      }
+      return next;
+    });
   }
 
   function saveMeeting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const saved = { ...meeting, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
-    setSavedMeetings((current) => [saved, ...current].slice(0, 6));
-    setSelectedMeetingId(saved.id);
-    setMeeting(saved);
+    void createMeetEvent();
   }
 
   function loadMeeting(id: string) {
@@ -192,62 +208,96 @@ export default function Home() {
     if (!found) return;
     setSelectedMeetingId(id);
     setMeeting(found);
+    setMembers(found.attendance || initialMembers);
   }
 
-  function openGoogleCalendar() {
-    window.open(calendarUrl, "_blank", "noopener,noreferrer");
-  }
+  async function createMeetEvent() {
+    setIsCreating(true);
+    setModal(null);
 
-  function downloadIcs() {
-    const stamps = toCalendarStamp(meeting.date, meeting.startTime, meeting.duration);
-    const attendeeLines = emails.map((email) => `ATTENDEE;ROLE=REQ-PARTICIPANT:mailto:${email}`);
-    const ics = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//ALT-F4 SIC-2026//Asistencia//ES",
-      "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH",
-      "BEGIN:VEVENT",
-      `UID:${crypto.randomUUID()}@alt-f4-sic-2026.local`,
-      `DTSTAMP:${toCalendarStamp(defaultDate, "00:00", 1).utcStart}`,
-      `DTSTART:${stamps.utcStart}`,
-      `DTEND:${stamps.utcEnd}`,
-      `SUMMARY:${escapeIcs(meeting.title)}`,
-      `DESCRIPTION:${escapeIcs(calendarDetails)}`,
-      `LOCATION:${escapeIcs(meeting.meetLink || meeting.location)}`,
-      ...attendeeLines,
-      "END:VEVENT",
-      "END:VCALENDAR",
-    ].join("\r\n");
+    try {
+      const normalizedTitle = meeting.title.trim().toLowerCase();
+      if (!normalizedTitle) {
+        throw new Error("Escribe un titulo para la reunion.");
+      }
+      if (savedMeetings.some((item) => item.meetUrl && item.title.trim().toLowerCase() === normalizedTitle)) {
+        throw new Error("Ya existe una reunion creada con ese titulo.");
+      }
 
-    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${meeting.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.ics`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+      const response = await fetch("/api/create-meet", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: meeting.title,
+          date: meeting.date,
+          time: meeting.startTime,
+          attendance: members,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data?.error || "El servicio de Brayan no pudo crear el evento.");
+      }
+
+      const meetUrl = data.meetUrl;
+
+      if (!meetUrl) {
+        throw new Error("El evento fue creado, pero no retorno una URL de Meet.");
+      }
+
+      const saved = {
+        ...meeting,
+        id: data.eventId || crypto.randomUUID(),
+        meetUrl,
+        calendarUrl: data.calendarUrl,
+        attendance: members,
+        createdAt: new Date().toISOString(),
+      };
+      setSavedMeetings((current) => [saved, ...current].slice(0, 6));
+      setSelectedMeetingId(saved.id);
+      setMeeting(saved);
+      setModal({
+        type: "success",
+        title: "Reunion creada",
+        message: "Este es el enlace de la reunion.",
+        meetUrl,
+        calendarUrl: data.calendarUrl,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo crear la reunion.";
+      setModal({
+        type: "error",
+        title: "No se pudo crear la reunion",
+        message,
+      });
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   return (
     <main className="app-shell">
       <section className="workspace">
         <aside className="sidebar" aria-label="Navegacion principal">
-          <div className="brand-mark">
-            <span>AF</span>
+          <div className="logo-panel">
+            <img src="/alt-f4-logo.png" alt="ALT-F4 AI SIC 2026" />
           </div>
-          <div>
+          <div className="brand-copy">
             <p className="eyebrow">Grupo de trabajo</p>
             <h1>ALT-F4 SIC-2026</h1>
           </div>
           <nav className="nav-list">
             <a className="active" href="#reunion">Reunion</a>
             <a href="#asistencia">Asistencia</a>
-            <a href="#calendar">Calendar</a>
+            <a href="#calendar">Meet</a>
           </nav>
           <div className="side-note">
             <span className="dot" />
-            Google Calendar se abre prellenado para revisar y guardar.
+            Crea reuniones y comparte el enlace con el equipo.
           </div>
         </aside>
 
@@ -255,14 +305,16 @@ export default function Home() {
           <header className="topbar">
             <div>
               <p className="eyebrow">Panel de asistencia</p>
-              <h2>{meeting.title}</h2>
+              <h2>{isLoadingMeetings ? "Cargando reuniones" : meeting.title}</h2>
             </div>
             <div className="top-actions">
-              <button className="secondary-button" type="button" onClick={downloadIcs}>
-                Descargar .ics
-              </button>
-              <button className="primary-button" type="button" onClick={openGoogleCalendar}>
-                Abrir en Google Calendar
+              {latestMeetUrl && (
+                <a className="secondary-button link-button" href={latestMeetUrl} target="_blank" rel="noreferrer">
+                  Ultimo Meet
+                </a>
+              )}
+              <button className="primary-button" type="button" onClick={createMeetEvent} disabled={isCreating}>
+                {isCreating ? "Creando..." : "Crear Meet"}
               </button>
             </div>
           </header>
@@ -281,8 +333,8 @@ export default function Home() {
               <strong>{pendingCount}</strong>
             </article>
             <article>
-              <span>Invitados con correo</span>
-              <strong>{emails.length}</strong>
+              <span>Meet creados</span>
+              <strong>{meetCount}</strong>
             </article>
           </section>
 
@@ -291,9 +343,9 @@ export default function Home() {
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">Crear reunion</p>
-                  <h3>Datos del evento</h3>
+                  <h3>Titulo, dia y hora</h3>
                 </div>
-                <span className="soft-pill">America/Bogota</span>
+                <span className="soft-pill">{TIME_ZONE}</span>
               </div>
 
               <form className="meeting-form" onSubmit={saveMeeting}>
@@ -304,9 +356,9 @@ export default function Home() {
                     onChange={(event) => setMeeting({ ...meeting, title: event.target.value })}
                   />
                 </label>
-                <div className="form-row">
+                <div className="form-row form-row-two">
                   <label>
-                    Fecha
+                    Dia
                     <input
                       type="date"
                       value={meeting.date}
@@ -321,44 +373,9 @@ export default function Home() {
                       onChange={(event) => setMeeting({ ...meeting, startTime: event.target.value })}
                     />
                   </label>
-                  <label>
-                    Minutos
-                    <input
-                      type="number"
-                      min="15"
-                      step="15"
-                      value={meeting.duration}
-                      onChange={(event) =>
-                        setMeeting({ ...meeting, duration: Number(event.target.value) })
-                      }
-                    />
-                  </label>
                 </div>
-                <label>
-                  Lugar
-                  <input
-                    value={meeting.location}
-                    onChange={(event) => setMeeting({ ...meeting, location: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Enlace de reunion
-                  <input
-                    placeholder="https://meet.google.com/..."
-                    value={meeting.meetLink}
-                    onChange={(event) => setMeeting({ ...meeting, meetLink: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Agenda
-                  <textarea
-                    rows={4}
-                    value={meeting.agenda}
-                    onChange={(event) => setMeeting({ ...meeting, agenda: event.target.value })}
-                  />
-                </label>
-                <button className="primary-button form-submit" type="submit">
-                  Guardar reunion en plataforma
+                <button className="primary-button form-submit" type="submit" disabled={isCreating}>
+                  {isCreating ? "Creando..." : "Crear Meet"}
                 </button>
               </form>
             </section>
@@ -366,22 +383,16 @@ export default function Home() {
             <section className="panel" id="calendar">
               <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">Salida a calendario</p>
-                  <h3>Reunion lista para enviar</h3>
+                  <p className="eyebrow">Reunion</p>
+                  <h3>Enlace generado</h3>
                 </div>
-                <span className="soft-pill">{emails.length ? "Con invitados" : "Sin correos"}</span>
+                <span className="soft-pill">ALT-F4</span>
               </div>
 
               <div className="calendar-card">
                 <p className="calendar-title">{meeting.title}</p>
                 <p>{meeting.date} a las {meeting.startTime}</p>
-                <p>{meeting.duration} minutos · {meeting.meetLink || meeting.location}</p>
-              </div>
-
-              <div className="notice">
-                <strong>Como funciona:</strong> la plataforma abre Google Calendar con titulo,
-                fecha, descripcion, lugar e invitados prellenados. Tu confirmas el guardado desde
-                Google.
+                <p>{meeting.meetUrl || "Aun no se ha creado el enlace de Meet"}</p>
               </div>
 
               {savedMeetings.length > 0 && (
@@ -390,7 +401,7 @@ export default function Home() {
                   <select value={selectedMeetingId} onChange={(event) => loadMeeting(event.target.value)}>
                     {savedMeetings.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.title} · {item.date}
+                        {item.title} - {item.date}
                       </option>
                     ))}
                   </select>
@@ -403,7 +414,7 @@ export default function Home() {
             <div className="panel-heading">
               <div>
                 <p className="eyebrow">Integrantes</p>
-                <h3>Control de asistencia</h3>
+                <h3>Asistencia de esta reunion</h3>
               </div>
               <span className="soft-pill">{presentCount}/{members.length} presentes</span>
             </div>
@@ -411,7 +422,6 @@ export default function Home() {
             <div className="attendance-table">
               <div className="table-head">
                 <span>Nombre</span>
-                <span>Correo para invitacion</span>
                 <span>Estado</span>
               </div>
               {members.map((member) => (
@@ -423,12 +433,6 @@ export default function Home() {
                       <small>{member.role}</small>
                     </div>
                   </div>
-                  <input
-                    aria-label={`Correo de ${member.name}`}
-                    placeholder="correo@ejemplo.com"
-                    value={member.email}
-                    onChange={(event) => updateMember(member.id, { email: event.target.value })}
-                  />
                   <select
                     className={`status-select ${member.status}`}
                     aria-label={`Estado de ${member.name}`}
@@ -449,6 +453,43 @@ export default function Home() {
           </section>
         </section>
       </section>
+
+      {modal && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="meet-modal-title">
+          <div className={`modal-card ${modal.type}`}>
+            <button className="modal-close" type="button" onClick={() => setModal(null)} aria-label="Cerrar modal">
+              Cerrar
+            </button>
+            <p className="eyebrow">{modal.type === "success" ? "Reunion" : "Error"}</p>
+            <h3 id="meet-modal-title">{modal.title}</h3>
+            <p>{modal.message}</p>
+            {modal.meetUrl && (
+              <div className="meet-url-box">
+                <span>URL de la reunion</span>
+                <a href={modal.meetUrl} target="_blank" rel="noreferrer">
+                  {modal.meetUrl}
+                </a>
+              </div>
+            )}
+            <div className="modal-actions">
+              {modal.meetUrl && (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(modal.meetUrl || "")}
+                >
+                  Copiar URL
+                </button>
+              )}
+              {modal.calendarUrl && (
+                <a className="primary-button link-button" href={modal.calendarUrl} target="_blank" rel="noreferrer">
+                  Ver evento
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

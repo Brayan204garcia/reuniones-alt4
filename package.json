@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "build:pages": "npm run build && node scripts/prepare-cloudflare-pages.mjs",
+    "deploy:pages": "npm run build:pages && wrangler pages deploy cloudflare-pages --project-name alt-f4-sic-2026-asistencia",
     "start": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
