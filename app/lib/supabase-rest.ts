@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { normalizeAttendance } from "./altf4-members";
 
 type AttendanceMember = {
   id: string;
@@ -91,15 +92,8 @@ export async function listMeetings() {
     `altf4_attendance?select=meeting_id,member_id,name,role,email,status&meeting_id=in.(${ids})&order=name.asc`,
   )) as SupabaseAttendanceRow[];
 
-  return meetings.map((meeting) => ({
-    id: meeting.id,
-    title: meeting.title,
-    date: meeting.meeting_date,
-    startTime: meeting.start_time,
-    meetUrl: meeting.meet_url,
-    calendarUrl: meeting.calendar_url,
-    createdAt: meeting.created_at,
-    attendance: attendance
+  const normalizedMeetings = meetings.map((meeting) => {
+    const meetingAttendance = attendance
       .filter((member) => member.meeting_id === meeting.id)
       .map((member) => ({
         id: member.member_id,
@@ -107,8 +101,27 @@ export async function listMeetings() {
         role: member.role,
         email: member.email,
         status: member.status,
-      })),
-  }));
+      }));
+
+    return {
+      id: meeting.id,
+      title: meeting.title,
+      date: meeting.meeting_date,
+      startTime: meeting.start_time,
+      meetUrl: meeting.meet_url,
+      calendarUrl: meeting.calendar_url,
+      createdAt: meeting.created_at,
+      attendance: normalizeAttendance(meetingAttendance),
+    };
+  });
+
+  await Promise.all(
+    normalizedMeetings.map((meeting) =>
+      saveAttendanceRows(meeting.id, meeting.attendance),
+    ),
+  );
+
+  return normalizedMeetings;
 }
 
 export async function meetingTitleExists(title: string) {
@@ -120,6 +133,8 @@ export async function meetingTitleExists(title: string) {
 }
 
 export async function saveMeeting(input: MeetingInput) {
+  const attendance = normalizeAttendance(input.attendance);
+
   await supabaseFetch("altf4_meetings", {
     method: "POST",
     headers: {
@@ -135,24 +150,26 @@ export async function saveMeeting(input: MeetingInput) {
     }),
   });
 
-  if (input.attendance.length > 0) {
-    await supabaseFetch("altf4_attendance?on_conflict=meeting_id,member_id", {
-      method: "POST",
-      headers: {
-        Prefer: "resolution=merge-duplicates,return=minimal",
-      },
-      body: JSON.stringify(
-        input.attendance.map((member) => ({
-          meeting_id: input.id,
-          member_id: member.id,
-          name: member.name,
-          role: member.role,
-          email: member.email || "",
-          status: member.status,
-        })),
-      ),
-    });
-  }
+  await saveAttendanceRows(input.id, attendance);
+}
+
+async function saveAttendanceRows(meetingId: string, attendance: AttendanceMember[]) {
+  await supabaseFetch("altf4_attendance?on_conflict=meeting_id,member_id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(
+      attendance.map((member) => ({
+        meeting_id: meetingId,
+        member_id: member.id,
+        name: member.name,
+        role: "Estudiante",
+        email: member.email || "",
+        status: member.status,
+      })),
+    ),
+  });
 }
 
 export async function updateAttendance(input: {
@@ -168,7 +185,7 @@ export async function updateAttendance(input: {
       meeting_id: input.meetingId,
       member_id: input.member.id,
       name: input.member.name,
-      role: input.member.role,
+      role: "Estudiante",
       email: input.member.email || "",
       status: input.member.status,
     }),

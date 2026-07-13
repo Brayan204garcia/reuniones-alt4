@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { altf4Members, normalizeAttendance } from "./lib/altf4-members";
 
 const TIME_ZONE = "America/Bogota";
 
@@ -33,43 +34,7 @@ type ModalState = {
   calendarUrl?: string;
 };
 
-const initialMembers: Member[] = [
-  {
-    id: "brayan",
-    name: "Brayan Garcia Torres",
-    role: "Coordinacion",
-    email: "",
-    status: "presente",
-  },
-  {
-    id: "michel",
-    name: "Michel Pulistar",
-    role: "Seguimiento",
-    email: "",
-    status: "pendiente",
-  },
-  {
-    id: "juan-diego",
-    name: "Juan Diego",
-    role: "Analisis",
-    email: "",
-    status: "pendiente",
-  },
-  {
-    id: "jesus",
-    name: "Jesus Alejandro",
-    role: "Documentacion",
-    email: "",
-    status: "pendiente",
-  },
-  {
-    id: "juan-carlos",
-    name: "Juan Carlos",
-    role: "Apoyo tecnico",
-    email: "",
-    status: "pendiente",
-  },
-];
+const initialMembers = normalizeAttendance(altf4Members) as Member[];
 
 const statusLabels: Record<AttendanceStatus, string> = {
   presente: "Presente",
@@ -127,12 +92,19 @@ export default function Home() {
           savedMeetings?: Meeting[];
           selectedMeetingId?: string;
         };
-        if (parsed.members) setMembers(parsed.members);
+        if (parsed.members) setMembers(normalizeAttendance(parsed.members) as Member[]);
         if (parsed.meeting) setMeeting(parsed.meeting);
-        if (parsed.savedMeetings) setSavedMeetings(parsed.savedMeetings);
+        if (parsed.savedMeetings) {
+          setSavedMeetings(
+            parsed.savedMeetings.map((item) => ({
+              ...item,
+              attendance: normalizeAttendance(item.attendance || []) as Member[],
+            })),
+          );
+        }
         if (parsed.selectedMeetingId) setSelectedMeetingId(parsed.selectedMeetingId);
         const selected = parsed.savedMeetings?.find((item) => item.id === parsed.selectedMeetingId);
-        if (selected?.attendance) setMembers(selected.attendance);
+        if (selected?.attendance) setMembers(normalizeAttendance(selected.attendance) as Member[]);
       } catch {
         window.localStorage.removeItem("alt-f4-sic-2026-state");
       }
@@ -154,7 +126,7 @@ export default function Home() {
           setSavedMeetings(data.meetings);
           setSelectedMeetingId(data.meetings[0].id);
           setMeeting(data.meetings[0]);
-          setMembers(data.meetings[0].attendance?.length ? data.meetings[0].attendance : initialMembers);
+          setMembers(normalizeAttendance(data.meetings[0].attendance || []) as Member[]);
         }
       } catch (error) {
         setModal({
@@ -221,7 +193,7 @@ export default function Home() {
     if (!found) return;
     setSelectedMeetingId(id);
     setMeeting(found);
-    setMembers(found.attendance || initialMembers);
+    setMembers(normalizeAttendance(found.attendance || []) as Member[]);
   }
 
   async function createMeetEvent() {
@@ -246,7 +218,7 @@ export default function Home() {
           title: meeting.title,
           date: meeting.date,
           time: meeting.startTime,
-          attendance: members,
+          attendance: normalizeAttendance(members),
         }),
       });
 
@@ -267,7 +239,7 @@ export default function Home() {
         id: data.eventId || crypto.randomUUID(),
         meetUrl,
         calendarUrl: data.calendarUrl,
-        attendance: members,
+        attendance: normalizeAttendance(members) as Member[],
         createdAt: new Date().toISOString(),
       };
       setSavedMeetings((current) => [saved, ...current]);
