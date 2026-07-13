@@ -27,6 +27,27 @@ function getAppsScriptUrl() {
   return url;
 }
 
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    throw new Error("Apps Script respondio vacio. Revisa que la URL desplegada este activa.");
+  }
+
+  try {
+    return JSON.parse(text) as {
+      ok?: boolean;
+      error?: string;
+      eventId?: string;
+      meetUrl?: string;
+      calendarUrl?: string;
+    };
+  } catch {
+    const preview = text.replace(/\s+/g, " ").trim().slice(0, 180);
+    throw new Error(`Apps Script no respondio JSON valido: ${preview}`);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as CreateMeetPayload;
@@ -58,7 +79,7 @@ export async function POST(request: Request) {
       method: "GET",
       redirect: "follow",
     });
-    const data = await response.json();
+    const data = await readJsonResponse(response);
 
     if (!response.ok || !data.ok) {
       return Response.json(

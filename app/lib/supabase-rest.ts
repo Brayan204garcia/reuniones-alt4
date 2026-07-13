@@ -1,3 +1,5 @@
+import { env } from "cloudflare:workers";
+
 type AttendanceMember = {
   id: string;
   name: string;
@@ -36,8 +38,12 @@ type SupabaseAttendanceRow = {
 };
 
 function getSupabaseConfig() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const bindings = env as unknown as {
+    SUPABASE_URL?: string;
+    SUPABASE_SERVICE_ROLE_KEY?: string;
+  };
+  const url = bindings.SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = bindings.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
     throw new Error("Faltan variables privadas de Supabase.");

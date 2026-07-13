@@ -87,6 +87,19 @@ function todayStamp() {
   return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 }
 
+async function readApiResponse(response: Response) {
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error("El servidor respondio vacio. Revisa las variables de Cloudflare.");
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(text.replace(/\s+/g, " ").trim().slice(0, 180));
+  }
+}
+
 export default function Home() {
   const defaultDate = todayStamp();
   const [members, setMembers] = useState<Member[]>(initialMembers);
@@ -131,7 +144,7 @@ export default function Home() {
     async function loadMeetingsFromDatabase() {
       try {
         const response = await fetch("/api/meetings");
-        const data = await response.json();
+        const data = await readApiResponse(response);
 
         if (!response.ok || !data.ok) {
           throw new Error(data?.error || "No se pudieron cargar las reuniones.");
@@ -237,7 +250,7 @@ export default function Home() {
         }),
       });
 
-      const data = await response.json();
+      const data = await readApiResponse(response);
 
       if (!response.ok || !data.ok) {
         throw new Error(data?.error || "El servicio de Brayan no pudo crear el evento.");
