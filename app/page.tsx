@@ -489,37 +489,62 @@ export default function Home() {
               ) : savedMeetings.length === 0 ? (
                 <div className="empty-history">Aun no hay reuniones guardadas.</div>
               ) : (
-                <div className="meeting-history full-window">
-                  {savedMeetings.map((item) => {
-                    const attendance = item.attendance || [];
-                    const present = attendance.filter((member) => member.status === "presente").length;
-                    const isSelected = item.id === selectedMeetingId;
+                <div className="history-table-wrap">
+                  <table className="history-table">
+                    <thead>
+                      <tr>
+                        <th>Reunion</th>
+                        <th>Dia y hora</th>
+                        {initialMembers.map((member) => (
+                          <th key={member.id}>{member.name}</th>
+                        ))}
+                        <th>Resumen</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedMeetings.map((item) => {
+                        const attendance = normalizeAttendance(item.attendance || []) as Member[];
+                        const present = attendance.filter((member) => member.status === "presente").length;
+                        const isSelected = item.id === selectedMeetingId;
 
-                    return (
-                      <article className={`meeting-row-card ${isSelected ? "selected" : ""}`} key={item.id}>
-                        <button className="meeting-row-main" type="button" onClick={() => openMeeting(item.id)}>
-                          <span className="meeting-row-title">{item.title}</span>
-                          <span>{item.date} a las {item.startTime}</span>
-                          <span>{present}/{attendance.length || members.length} presentes</span>
-                        </button>
-                        <div className="meeting-row-actions">
-                          <button className="secondary-button" type="button" onClick={() => openMeeting(item.id)}>
-                            Abrir
-                          </button>
-                          {item.meetUrl && (
-                            <a className="secondary-button link-button" href={item.meetUrl} target="_blank" rel="noreferrer">
-                              Meet
-                            </a>
-                          )}
-                          {item.calendarUrl && (
-                            <a className="secondary-button link-button" href={item.calendarUrl} target="_blank" rel="noreferrer">
-                              Calendario
-                            </a>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
+                        return (
+                          <tr className={isSelected ? "selected" : ""} key={item.id}>
+                            <td>
+                              <button className="history-title-button" type="button" onClick={() => openMeeting(item.id)}>
+                                {item.title}
+                              </button>
+                            </td>
+                            <td>{item.date} a las {item.startTime}</td>
+                            {initialMembers.map((member) => {
+                              const status = attendance.find((itemMember) => itemMember.id === member.id)?.status || "pendiente";
+
+                              return (
+                                <td key={member.id}>
+                                  <span className={`attendance-badge ${status}`}>
+                                    {statusLabels[status as AttendanceStatus] || status}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                            <td>{present}/{attendance.length} presentes</td>
+                            <td>
+                              <div className="history-actions">
+                                <button className="secondary-button" type="button" onClick={() => openMeeting(item.id)}>
+                                  Abrir
+                                </button>
+                                {item.meetUrl && (
+                                  <a className="secondary-button link-button" href={item.meetUrl} target="_blank" rel="noreferrer">
+                                    Meet
+                                  </a>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </section>
