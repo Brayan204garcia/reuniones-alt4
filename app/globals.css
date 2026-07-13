@@ -162,17 +162,19 @@ h3 {
   margin-top: 4px;
 }
 
-.nav-list a {
+.nav-list button {
   color: var(--muted);
   text-decoration: none;
   padding: 11px 12px;
   border: 1px solid transparent;
   border-radius: 9999px;
+  background: transparent;
   font-size: 15px;
+  text-align: left;
 }
 
-.nav-list a.active,
-.nav-list a:hover {
+.nav-list button.active,
+.nav-list button:hover {
   background: var(--primary);
   color: var(--primary-ink);
   border-color: var(--primary);
@@ -440,6 +442,11 @@ textarea:focus {
   max-height: 460px;
   overflow: auto;
   padding-right: 4px;
+}
+
+.meeting-history.full-window {
+  max-height: calc(100vh - 300px);
+  min-height: 420px;
 }
 
 .meeting-row-card {

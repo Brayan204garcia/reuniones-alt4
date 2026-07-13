@@ -34,6 +34,8 @@ type ModalState = {
   calendarUrl?: string;
 };
 
+type ViewMode = "dashboard" | "history";
+
 const initialMembers = normalizeAttendance(altf4Members) as Member[];
 
 const statusLabels: Record<AttendanceStatus, string> = {
@@ -80,6 +82,7 @@ export default function Home() {
   const [storageReady, setStorageReady] = useState(false);
   const [isLoadingMeetings, setIsLoadingMeetings] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("dashboard");
   const [modal, setModal] = useState<ModalState | null>(null);
 
   useEffect(() => {
@@ -196,6 +199,11 @@ export default function Home() {
     setMembers(normalizeAttendance(found.attendance || []) as Member[]);
   }
 
+  function openMeeting(id: string) {
+    loadMeeting(id);
+    setViewMode("dashboard");
+  }
+
   async function createMeetEvent() {
     setIsCreating(true);
     setModal(null);
@@ -276,10 +284,20 @@ export default function Home() {
             <h1>ALT-F4 SIC-2026</h1>
           </div>
           <nav className="nav-list">
-            <a className="active" href="#reunion">Reunion</a>
-            <a href="#historial">Historial</a>
-            <a href="#asistencia">Asistencia</a>
-            <a href="#calendar">Meet</a>
+            <button
+              className={viewMode === "dashboard" ? "active" : ""}
+              type="button"
+              onClick={() => setViewMode("dashboard")}
+            >
+              Panel
+            </button>
+            <button
+              className={viewMode === "history" ? "active" : ""}
+              type="button"
+              onClick={() => setViewMode("history")}
+            >
+              Historial
+            </button>
           </nav>
           <div className="side-note">
             <span className="dot" />
@@ -290,8 +308,14 @@ export default function Home() {
         <section className="content">
           <header className="topbar">
             <div>
-              <p className="eyebrow">Panel de asistencia</p>
-              <h2>{isLoadingMeetings ? "Cargando reuniones" : meeting.title}</h2>
+              <p className="eyebrow">{viewMode === "history" ? "Ventana de historial" : "Panel de asistencia"}</p>
+              <h2>
+                {viewMode === "history"
+                  ? "Todas las reuniones"
+                  : isLoadingMeetings
+                    ? "Cargando reuniones"
+                    : meeting.title}
+              </h2>
             </div>
             <div className="top-actions">
               {latestMeetUrl && (
@@ -299,194 +323,207 @@ export default function Home() {
                   Ultimo Meet
                 </a>
               )}
-              <button className="primary-button" type="button" onClick={createMeetEvent} disabled={isCreating}>
-                {isCreating ? "Creando..." : "Crear Meet"}
-              </button>
+              {viewMode === "history" ? (
+                <button className="primary-button" type="button" onClick={() => setViewMode("dashboard")}>
+                  Volver al panel
+                </button>
+              ) : (
+                <button className="primary-button" type="button" onClick={createMeetEvent} disabled={isCreating}>
+                  {isCreating ? "Creando..." : "Crear Meet"}
+                </button>
+              )}
             </div>
           </header>
 
-          <section className="metric-grid" aria-label="Resumen de asistencia">
-            <article>
-              <span>Integrantes</span>
-              <strong>{members.length}</strong>
-            </article>
-            <article>
-              <span>Presentes</span>
-              <strong>{presentCount}</strong>
-            </article>
-            <article>
-              <span>Pendientes</span>
-              <strong>{pendingCount}</strong>
-            </article>
-            <article>
-              <span>Meet creados</span>
-              <strong>{meetCount}</strong>
-            </article>
-            <article>
-              <span>Reuniones</span>
-              <strong>{savedMeetings.length}</strong>
-            </article>
-          </section>
+          {viewMode === "dashboard" ? (
+            <>
+              <section className="metric-grid" aria-label="Resumen de asistencia">
+                <article>
+                  <span>Integrantes</span>
+                  <strong>{members.length}</strong>
+                </article>
+                <article>
+                  <span>Presentes</span>
+                  <strong>{presentCount}</strong>
+                </article>
+                <article>
+                  <span>Pendientes</span>
+                  <strong>{pendingCount}</strong>
+                </article>
+                <article>
+                  <span>Meet creados</span>
+                  <strong>{meetCount}</strong>
+                </article>
+                <article>
+                  <span>Reuniones</span>
+                  <strong>{savedMeetings.length}</strong>
+                </article>
+              </section>
 
-          <div className="main-grid">
-            <section className="panel" id="reunion">
+              <div className="main-grid">
+                <section className="panel" id="reunion">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="eyebrow">Crear reunion</p>
+                      <h3>Titulo, dia y hora</h3>
+                    </div>
+                    <span className="soft-pill">{TIME_ZONE}</span>
+                  </div>
+
+                  <form className="meeting-form" onSubmit={saveMeeting}>
+                    <label>
+                      Titulo
+                      <input
+                        value={meeting.title}
+                        onChange={(event) => setMeeting({ ...meeting, title: event.target.value })}
+                      />
+                    </label>
+                    <div className="form-row form-row-two">
+                      <label>
+                        Dia
+                        <input
+                          type="date"
+                          value={meeting.date}
+                          onChange={(event) => setMeeting({ ...meeting, date: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        Hora
+                        <input
+                          type="time"
+                          value={meeting.startTime}
+                          onChange={(event) => setMeeting({ ...meeting, startTime: event.target.value })}
+                        />
+                      </label>
+                    </div>
+                    <button className="primary-button form-submit" type="submit" disabled={isCreating}>
+                      {isCreating ? "Creando..." : "Crear Meet"}
+                    </button>
+                  </form>
+                </section>
+
+                <section className="panel" id="calendar">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="eyebrow">Reunion</p>
+                      <h3>Enlace generado</h3>
+                    </div>
+                    <span className="soft-pill">ALT-F4</span>
+                  </div>
+
+                  <div className="calendar-card">
+                    <p className="calendar-title">{meeting.title}</p>
+                    <p>{meeting.date} a las {meeting.startTime}</p>
+                    <p>{meeting.meetUrl || "Aun no se ha creado el enlace de Meet"}</p>
+                  </div>
+
+                  {savedMeetings.length > 0 && (
+                    <label className="saved-select">
+                      Reuniones guardadas
+                      <select value={selectedMeetingId} onChange={(event) => loadMeeting(event.target.value)}>
+                        {savedMeetings.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.title} - {item.date}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </section>
+              </div>
+
+              <section className="panel attendance-panel" id="asistencia">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Integrantes</p>
+                    <h3>Asistencia de esta reunion</h3>
+                  </div>
+                  <span className="soft-pill">{presentCount}/{members.length} presentes</span>
+                </div>
+
+                <div className="attendance-table">
+                  <div className="table-head">
+                    <span>Nombre</span>
+                    <span>Estado</span>
+                  </div>
+                  {members.map((member) => (
+                    <div className="table-row" key={member.id}>
+                      <div className="person">
+                        <span className="avatar">{member.name.slice(0, 2).toUpperCase()}</span>
+                        <div>
+                          <strong>{member.name}</strong>
+                          <small>{member.role}</small>
+                        </div>
+                      </div>
+                      <select
+                        className={`status-select ${member.status}`}
+                        aria-label={`Estado de ${member.name}`}
+                        value={member.status}
+                        onChange={(event) =>
+                          updateMember(member.id, { status: event.target.value as AttendanceStatus })
+                        }
+                      >
+                        {Object.entries(statusLabels).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          ) : (
+            <section className="panel history-panel" id="historial">
               <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">Crear reunion</p>
-                  <h3>Titulo, dia y hora</h3>
+                  <p className="eyebrow">Historial</p>
+                  <h3>Todas las reuniones</h3>
                 </div>
-                <span className="soft-pill">{TIME_ZONE}</span>
+                <span className="soft-pill">{savedMeetings.length} registradas</span>
               </div>
 
-              <form className="meeting-form" onSubmit={saveMeeting}>
-                <label>
-                  Titulo
-                  <input
-                    value={meeting.title}
-                    onChange={(event) => setMeeting({ ...meeting, title: event.target.value })}
-                  />
-                </label>
-                <div className="form-row form-row-two">
-                  <label>
-                    Dia
-                    <input
-                      type="date"
-                      value={meeting.date}
-                      onChange={(event) => setMeeting({ ...meeting, date: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Hora
-                    <input
-                      type="time"
-                      value={meeting.startTime}
-                      onChange={(event) => setMeeting({ ...meeting, startTime: event.target.value })}
-                    />
-                  </label>
+              {isLoadingMeetings ? (
+                <div className="empty-history">Cargando reuniones...</div>
+              ) : savedMeetings.length === 0 ? (
+                <div className="empty-history">Aun no hay reuniones guardadas.</div>
+              ) : (
+                <div className="meeting-history full-window">
+                  {savedMeetings.map((item) => {
+                    const attendance = item.attendance || [];
+                    const present = attendance.filter((member) => member.status === "presente").length;
+                    const isSelected = item.id === selectedMeetingId;
+
+                    return (
+                      <article className={`meeting-row-card ${isSelected ? "selected" : ""}`} key={item.id}>
+                        <button className="meeting-row-main" type="button" onClick={() => openMeeting(item.id)}>
+                          <span className="meeting-row-title">{item.title}</span>
+                          <span>{item.date} a las {item.startTime}</span>
+                          <span>{present}/{attendance.length || members.length} presentes</span>
+                        </button>
+                        <div className="meeting-row-actions">
+                          <button className="secondary-button" type="button" onClick={() => openMeeting(item.id)}>
+                            Abrir
+                          </button>
+                          {item.meetUrl && (
+                            <a className="secondary-button link-button" href={item.meetUrl} target="_blank" rel="noreferrer">
+                              Meet
+                            </a>
+                          )}
+                          {item.calendarUrl && (
+                            <a className="secondary-button link-button" href={item.calendarUrl} target="_blank" rel="noreferrer">
+                              Calendario
+                            </a>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-                <button className="primary-button form-submit" type="submit" disabled={isCreating}>
-                  {isCreating ? "Creando..." : "Crear Meet"}
-                </button>
-              </form>
-            </section>
-
-            <section className="panel" id="calendar">
-              <div className="panel-heading">
-                <div>
-                  <p className="eyebrow">Reunion</p>
-                  <h3>Enlace generado</h3>
-                </div>
-                <span className="soft-pill">ALT-F4</span>
-              </div>
-
-              <div className="calendar-card">
-                <p className="calendar-title">{meeting.title}</p>
-                <p>{meeting.date} a las {meeting.startTime}</p>
-                <p>{meeting.meetUrl || "Aun no se ha creado el enlace de Meet"}</p>
-              </div>
-
-              {savedMeetings.length > 0 && (
-                <label className="saved-select">
-                  Reuniones guardadas
-                  <select value={selectedMeetingId} onChange={(event) => loadMeeting(event.target.value)}>
-                    {savedMeetings.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.title} - {item.date}
-                      </option>
-                    ))}
-                  </select>
-                </label>
               )}
             </section>
-          </div>
-
-          <section className="panel history-panel" id="historial">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Historial</p>
-                <h3>Todas las reuniones</h3>
-              </div>
-              <span className="soft-pill">{savedMeetings.length} registradas</span>
-            </div>
-
-            {isLoadingMeetings ? (
-              <div className="empty-history">Cargando reuniones...</div>
-            ) : savedMeetings.length === 0 ? (
-              <div className="empty-history">Aun no hay reuniones guardadas.</div>
-            ) : (
-              <div className="meeting-history">
-                {savedMeetings.map((item) => {
-                  const attendance = item.attendance || [];
-                  const present = attendance.filter((member) => member.status === "presente").length;
-                  const isSelected = item.id === selectedMeetingId;
-
-                  return (
-                    <article className={`meeting-row-card ${isSelected ? "selected" : ""}`} key={item.id}>
-                      <button className="meeting-row-main" type="button" onClick={() => loadMeeting(item.id)}>
-                        <span className="meeting-row-title">{item.title}</span>
-                        <span>{item.date} a las {item.startTime}</span>
-                        <span>{present}/{attendance.length || members.length} presentes</span>
-                      </button>
-                      <div className="meeting-row-actions">
-                        {item.meetUrl && (
-                          <a className="secondary-button link-button" href={item.meetUrl} target="_blank" rel="noreferrer">
-                            Meet
-                          </a>
-                        )}
-                        {item.calendarUrl && (
-                          <a className="secondary-button link-button" href={item.calendarUrl} target="_blank" rel="noreferrer">
-                            Calendario
-                          </a>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="panel attendance-panel" id="asistencia">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Integrantes</p>
-                <h3>Asistencia de esta reunion</h3>
-              </div>
-              <span className="soft-pill">{presentCount}/{members.length} presentes</span>
-            </div>
-
-            <div className="attendance-table">
-              <div className="table-head">
-                <span>Nombre</span>
-                <span>Estado</span>
-              </div>
-              {members.map((member) => (
-                <div className="table-row" key={member.id}>
-                  <div className="person">
-                    <span className="avatar">{member.name.slice(0, 2).toUpperCase()}</span>
-                    <div>
-                      <strong>{member.name}</strong>
-                      <small>{member.role}</small>
-                    </div>
-                  </div>
-                  <select
-                    className={`status-select ${member.status}`}
-                    aria-label={`Estado de ${member.name}`}
-                    value={member.status}
-                    onChange={(event) =>
-                      updateMember(member.id, { status: event.target.value as AttendanceStatus })
-                    }
-                  >
-                    {Object.entries(statusLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          </section>
+          )}
         </section>
       </section>
 
