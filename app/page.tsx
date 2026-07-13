@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { altf4Members, normalizeAttendance } from "./lib/altf4-members";
+import { createPendingAttendance, normalizeAttendance } from "./lib/altf4-members";
 
 const TIME_ZONE = "America/Bogota";
 
@@ -36,7 +36,7 @@ type ModalState = {
 
 type ViewMode = "dashboard" | "history";
 
-const initialMembers = normalizeAttendance(altf4Members) as Member[];
+const initialMembers = createPendingAttendance() as Member[];
 
 const statusLabels: Record<AttendanceStatus, string> = {
   presente: "Presente",
@@ -90,12 +90,10 @@ export default function Home() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as {
-          members?: Member[];
           meeting?: Meeting;
           savedMeetings?: Meeting[];
           selectedMeetingId?: string;
         };
-        if (parsed.members) setMembers(normalizeAttendance(parsed.members) as Member[]);
         if (parsed.meeting) setMeeting(parsed.meeting);
         if (parsed.savedMeetings) {
           setSavedMeetings(
@@ -149,9 +147,9 @@ export default function Home() {
     if (!storageReady) return;
     window.localStorage.setItem(
       "alt-f4-sic-2026-state",
-      JSON.stringify({ members, meeting, savedMeetings, selectedMeetingId }),
+      JSON.stringify({ meeting, savedMeetings, selectedMeetingId }),
     );
-  }, [members, meeting, savedMeetings, selectedMeetingId, storageReady]);
+  }, [meeting, savedMeetings, selectedMeetingId, storageReady]);
 
   const presentCount = members.filter((member) => member.status === "presente").length;
   const pendingCount = members.filter((member) => member.status === "pendiente").length;
@@ -162,22 +160,23 @@ export default function Home() {
   );
 
   function updateMember(id: string, patch: Partial<Member>) {
+    const meetingId = selectedMeetingId;
     setMembers((current) => {
       const next = current.map((member) => (member.id === id ? { ...member, ...patch } : member));
       const updatedMember = next.find((member) => member.id === id);
       setSavedMeetings((meetings) =>
         meetings.map((item) =>
-          item.id === selectedMeetingId ? { ...item, attendance: next } : item,
+          item.id === meetingId ? { ...item, attendance: next } : item,
         ),
       );
-      if (updatedMember && savedMeetings.some((item) => item.id === selectedMeetingId && item.meetUrl)) {
+      if (updatedMember && savedMeetings.some((item) => item.id === meetingId && item.meetUrl)) {
         void fetch("/api/attendance", {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            meetingId: selectedMeetingId,
+            meetingId,
             member: updatedMember,
           }),
         });
@@ -226,7 +225,7 @@ export default function Home() {
           title: meeting.title,
           date: meeting.date,
           time: meeting.startTime,
-          attendance: normalizeAttendance(members),
+          attendance: createPendingAttendance(),
         }),
       });
 
@@ -242,17 +241,19 @@ export default function Home() {
         throw new Error("El evento fue creado, pero no retorno una URL de Meet.");
       }
 
+      const pendingAttendance = createPendingAttendance() as Member[];
       const saved = {
         ...meeting,
         id: data.eventId || crypto.randomUUID(),
         meetUrl,
         calendarUrl: data.calendarUrl,
-        attendance: normalizeAttendance(members) as Member[],
+        attendance: pendingAttendance,
         createdAt: new Date().toISOString(),
       };
       setSavedMeetings((current) => [saved, ...current]);
       setSelectedMeetingId(saved.id);
       setMeeting(saved);
+      setMembers(pendingAttendance);
       setModal({
         type: "success",
         title: "Reunion creada",

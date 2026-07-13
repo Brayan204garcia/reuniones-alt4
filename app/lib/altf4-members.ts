@@ -12,7 +12,7 @@ export const altf4Members: Altf4Member[] = [
     name: "Brayan Garcia Torres",
     role: "Estudiante",
     email: "",
-    status: "presente",
+    status: "pendiente",
   },
   {
     id: "michel",
@@ -49,5 +49,12 @@ export function normalizeAttendance(attendance: Altf4Member[] = []) {
     ...member,
     ...(attendance.find((item) => item.id === member.id) || {}),
     role: "Estudiante",
+  }));
+}
+
+export function createPendingAttendance() {
+  return altf4Members.map((member) => ({
+    ...member,
+    status: "pendiente",
   }));
 }

@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { createPendingAttendance } from "../../lib/altf4-members";
 import { meetingTitleExists, saveMeeting } from "../../lib/supabase-rest";
 
 const DEFAULT_GUEST_EMAIL = "bratorres204@gmail.com";
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     const title = payload.title?.trim() ?? "";
     const date = payload.date?.trim() ?? "";
     const time = payload.time?.trim() ?? "";
-    const attendance = payload.attendance ?? [];
+    const attendance = createPendingAttendance();
 
     if (!title || !date || !time) {
       return Response.json(
