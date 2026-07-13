@@ -270,7 +270,7 @@ export default function Home() {
         attendance: members,
         createdAt: new Date().toISOString(),
       };
-      setSavedMeetings((current) => [saved, ...current].slice(0, 6));
+      setSavedMeetings((current) => [saved, ...current]);
       setSelectedMeetingId(saved.id);
       setMeeting(saved);
       setModal({
@@ -305,6 +305,7 @@ export default function Home() {
           </div>
           <nav className="nav-list">
             <a className="active" href="#reunion">Reunion</a>
+            <a href="#historial">Historial</a>
             <a href="#asistencia">Asistencia</a>
             <a href="#calendar">Meet</a>
           </nav>
@@ -348,6 +349,10 @@ export default function Home() {
             <article>
               <span>Meet creados</span>
               <strong>{meetCount}</strong>
+            </article>
+            <article>
+              <span>Reuniones</span>
+              <strong>{savedMeetings.length}</strong>
             </article>
           </section>
 
@@ -422,6 +427,52 @@ export default function Home() {
               )}
             </section>
           </div>
+
+          <section className="panel history-panel" id="historial">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Historial</p>
+                <h3>Todas las reuniones</h3>
+              </div>
+              <span className="soft-pill">{savedMeetings.length} registradas</span>
+            </div>
+
+            {isLoadingMeetings ? (
+              <div className="empty-history">Cargando reuniones...</div>
+            ) : savedMeetings.length === 0 ? (
+              <div className="empty-history">Aun no hay reuniones guardadas.</div>
+            ) : (
+              <div className="meeting-history">
+                {savedMeetings.map((item) => {
+                  const attendance = item.attendance || [];
+                  const present = attendance.filter((member) => member.status === "presente").length;
+                  const isSelected = item.id === selectedMeetingId;
+
+                  return (
+                    <article className={`meeting-row-card ${isSelected ? "selected" : ""}`} key={item.id}>
+                      <button className="meeting-row-main" type="button" onClick={() => loadMeeting(item.id)}>
+                        <span className="meeting-row-title">{item.title}</span>
+                        <span>{item.date} a las {item.startTime}</span>
+                        <span>{present}/{attendance.length || members.length} presentes</span>
+                      </button>
+                      <div className="meeting-row-actions">
+                        {item.meetUrl && (
+                          <a className="secondary-button link-button" href={item.meetUrl} target="_blank" rel="noreferrer">
+                            Meet
+                          </a>
+                        )}
+                        {item.calendarUrl && (
+                          <a className="secondary-button link-button" href={item.calendarUrl} target="_blank" rel="noreferrer">
+                            Calendario
+                          </a>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
           <section className="panel attendance-panel" id="asistencia">
             <div className="panel-heading">

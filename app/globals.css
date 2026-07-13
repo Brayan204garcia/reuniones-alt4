@@ -264,7 +264,7 @@ h3 {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -428,6 +428,84 @@ textarea:focus {
 .notice strong {
   color: var(--text);
   font-weight: 400;
+}
+
+.history-panel {
+  overflow: hidden;
+}
+
+.meeting-history {
+  display: grid;
+  gap: 10px;
+  max-height: 460px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.meeting-row-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 12px;
+}
+
+.meeting-row-card.selected {
+  border-color: var(--primary);
+  background: #0a0e15;
+}
+
+.meeting-row-main {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) 150px 120px;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  text-align: left;
+}
+
+.meeting-row-main span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-feature-settings: "tnum";
+}
+
+.meeting-row-main .meeting-row-title {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.meeting-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.meeting-row-actions .secondary-button {
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.empty-history {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  padding: 16px;
+  font-size: 14px;
 }
 
 .attendance-panel {
@@ -656,6 +734,19 @@ textarea:focus {
   .metric-grid,
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  .meeting-row-card,
+  .meeting-row-main {
+    grid-template-columns: 1fr;
+  }
+
+  .meeting-row-actions {
+    justify-content: stretch;
+  }
+
+  .meeting-row-actions .secondary-button {
+    flex: 1 1 140px;
   }
 
   .table-head {
