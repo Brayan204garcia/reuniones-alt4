@@ -19,7 +19,6 @@ type MeetingInput = {
 type SupabaseMeetingRow = {
   id: string;
   title: string;
-  title_key: string;
   meeting_date: string;
   start_time: string;
   meet_url: string | null;
@@ -53,10 +52,6 @@ function getSupabaseConfig() {
   };
 }
 
-function normalizeTitle(value: string) {
-  return value.trim().toLowerCase();
-}
-
 async function supabaseFetch(path: string, init: RequestInit = {}) {
   const { url, key } = getSupabaseConfig();
   const response = await fetch(`${url}/rest/v1/${path}`, {
@@ -80,7 +75,7 @@ async function supabaseFetch(path: string, init: RequestInit = {}) {
 
 export async function listMeetings() {
   const meetings = (await supabaseFetch(
-    "altf4_meetings?select=id,title,title_key,meeting_date,start_time,meet_url,calendar_url,created_at&order=created_at.desc",
+    "altf4_meetings?select=id,title,meeting_date,start_time,meet_url,calendar_url,created_at&order=created_at.desc",
   )) as SupabaseMeetingRow[];
 
   if (meetings.length === 0) return [];
@@ -111,9 +106,9 @@ export async function listMeetings() {
 }
 
 export async function meetingTitleExists(title: string) {
-  const titleKey = encodeURIComponent(normalizeTitle(title));
+  const exactTitle = encodeURIComponent(title.trim());
   const rows = (await supabaseFetch(
-    `altf4_meetings?select=id&title_key=eq.${titleKey}&limit=1`,
+    `altf4_meetings?select=id&title=eq.${exactTitle}&limit=1`,
   )) as Array<{ id: string }>;
   return rows.length > 0;
 }
@@ -127,7 +122,6 @@ export async function saveMeeting(input: MeetingInput) {
     body: JSON.stringify({
       id: input.id,
       title: input.title,
-      title_key: normalizeTitle(input.title),
       meeting_date: input.date,
       start_time: input.startTime,
       meet_url: input.meetUrl || null,
