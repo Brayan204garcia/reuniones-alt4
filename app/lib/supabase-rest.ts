@@ -43,6 +43,9 @@ function getSupabaseConfig() {
   if (!url || !key) {
     throw new Error("Faltan variables privadas de Supabase.");
   }
+  if (url.startsWith("postgresql://") || url.startsWith("postgres://")) {
+    throw new Error("SUPABASE_URL debe ser la URL HTTPS del proyecto, no la cadena de Postgres.");
+  }
 
   return {
     url: url.replace(/\/$/, ""),
